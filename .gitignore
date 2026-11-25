@@ -1,0 +1,24 @@
+# Secrets: never commit API keys
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+
+# Local data and generated files
+data/*.duckdb
+data/*.duckdb.wal
+data/*.csv
+output/
+*.bak
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
