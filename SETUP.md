@@ -7,10 +7,10 @@ A short, step-by-step guide to get the bot running on real data.
 - **Python 3.11 or newer** ([python.org](https://www.python.org/downloads/)).
   On Windows, tick **"Add python.exe to PATH"** during installation.
 - About 20 minutes for the first setup.
-- Optional: a free **Alpaca** account (ETF prices) and a **Telegram** bot
-  (notifications). Neither is essential to try the bot: the demo needs no
-  keys at all, and on real data the bot uses Stooq for ETF prices if
-  Alpaca is not set up. Everything else is free and needs no key.
+- A free **Alpaca** account: required for real ETF prices.
+- Optional: a **Telegram** bot for notifications. It is not essential to
+  try the bot.
+- Everything else is free and needs no key.
 
 ## 2. First launch
 
@@ -38,7 +38,7 @@ and save. Leave empty what you do not use.
 
 | Key | How to get it |
 |-----|---------------|
-| `ALPACA_API_KEY`, `ALPACA_API_SECRET` | Create a free account at alpaca.markets (paper trading is fine) and generate an API key in the dashboard. Without these keys the bot uses Stooq for ETF prices. |
+| `ALPACA_API_KEY`, `ALPACA_API_SECRET` | **Required.** Create a free account at alpaca.markets (paper trading is fine) and generate an API key in the dashboard. |
 | `TELEGRAM_BOT_TOKEN` | In Telegram, write to **@BotFather**, send `/newbot` and follow the steps: it gives you the token. |
 | `TELEGRAM_CHAT_ID` | Send any message to your new bot, then open `https://api.telegram.org/bot<TOKEN>/getUpdates` in a browser (with your token): the number after `"chat":{"id":` is your chat ID. |
 | `EMAIL_SMTP_USER`, `EMAIL_SMTP_PASSWORD` | Optional, for email notifications. With Gmail use an **app password** (myaccount.google.com/apppasswords, requires 2-step verification), not your normal password. Also set `email_enabled: true` in `params.yaml`. |
@@ -53,8 +53,8 @@ and save. Leave empty what you do not use.
    40 ETFs, the S&P 500, the VIX and the TDEX index. The first time this
    takes a few minutes. Afterwards it only adds the missing days.
 3. Run menu item **8 (Check)**. It marks what is ready with ✓ and what is
-   missing with !. A missing Alpaca or Telegram key is only a warning if
-   you do not use them.
+   missing with !. A missing Telegram key is only a warning if you do not
+   use notifications.
 
 The free sources do not cover the full history back to 2005 for every
 series. For example, FRED publishes only the last 10 years of the S&P 500.
@@ -89,7 +89,7 @@ Automatic sending of each day's signal is not connected to the menu yet.
 | "Local history EMPTY" | Run menu item 2 (Update the data). |
 | "Not yet published by the source: ^SPX, ^VIX" | Normal before ~10:00 New York time. Run it again later. |
 | Signal dated the previous day | Same reason: the last day is not published yet. |
-| Some symbols failed to download | Run item 2 again later. Missing Alpaca keys → it falls back to Stooq. |
+| Some symbols failed to download | Check the Alpaca keys in `.env`, then run item 2 again later. |
 | Telegram test fails | Check token and chat ID, and that you sent at least one message to your bot. |
 | You changed `params.yaml` and something broke | The previous version is saved as `params.yaml.bak`. |
 | Numbers change at every run | You are in `mode: demo`. Switch to `mode: live`. |
