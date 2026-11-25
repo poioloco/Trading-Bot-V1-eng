@@ -1,35 +1,22 @@
-# Tactical Trading Bot — V2
+# Tactical Trading Bot — V1
 
-## About this project
+A daily **signal** bot (BUY / SELL / HOLD) for US equities and volatility. It
+combines two models:
 
-Tactical Trading Bot is a Python bot that produces a daily signal
-(BUY / SELL / HOLD) for US equities and volatility.
+- a **bottom-up regime model** built on 40 ETFs, which classifies every day
+  into one of four macro quadrants (Disinflation, Reflation, Stagflation,
+  Deflation);
+- a **VIX model** with three voting legs — volatility risk premium (VRP),
+  relative strength (RSI) and the TDEX tail-risk index — whose thresholds
+  depend on the current quadrant.
 
-It works in two layers:
+Everything runs locally: prices live in a single DuckDB file, the engines
+are incremental (they only process new days) and the backtest replays
+history with exactly the same code used live.
 
-- a **regime model** that reads 40 ETFs and places each day in one of four
-  macro regimes (Disinflation, Reflation, Stagflation, Deflation);
-- a **VIX model** with three voting indicators (volatility risk premium,
-  RSI and the TDEX tail-risk index), whose thresholds adapt to the current
-  regime.
-
-Everything runs locally: prices are stored in a small database, the bot
-only downloads the new days, and the backtest replays the whole history
-with exactly the same code used for the live signal. A robustness report
-(walk-forward, overfitting checks, bootstrap and permutation tests) helps
-judge whether the results can be trusted, and a browser dashboard shows
-the signal, the votes and the performance.
-
-> **Disclaimer.** The bot only produces signals and does not place orders
-> yet. It is not financial advice. Back-tested results do not guarantee
-> future returns.
-
-## Feedback welcome
-
-This is a personal project and I would really like to know what you think
-of it: the model, the methodology, the code or simply how easy it is to
-use. Any comment, criticism or idea is welcome. Feel free to open an issue
-or contact me directly.
+> **Disclaimer.** This project produces *signals only*: it never places
+> orders. It is not financial advice. Back-tested results do not guarantee
+> future returns — read the robustness report before trusting any number.
 
 ---
 

@@ -1,0 +1,18 @@
+# Dependencies of the Tactical Trading Bot V1.
+# Versions PINNED to the current major (>=minimum,<major+1): this way a
+# "pip install -r requirements.txt" a year from now does not pull in a new
+# major with incompatible changes. To upgrade a major: raise the cap by
+# hand and re-run the test suite (pytest tests/).
+
+duckdb>=1.5,<2                 # data archive (prices, FRED series)
+pandas>=3.0,<4                 # time-series processing
+numpy>=2.4,<3                  # numerical computing
+PyYAML>=6.0,<7                 # reading/writing params.yaml
+APScheduler>=3.11,<4           # scheduler of the live runner
+requests>=2.33,<3              # HTTP calls (FRED, Alpaca, Telegram)
+exchange_calendars>=4.13,<5    # exchange calendar (market days)
+matplotlib>=3.10,<4            # backtest and calibration charts
+
+# Only for development/verification (not needed by the running bot):
+pytest>=9.1,<10                # test suite
+openpyxl>=3.1,<4               # reading Excel workbooks (import-history)

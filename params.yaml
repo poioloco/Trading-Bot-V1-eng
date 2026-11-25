@@ -1,0 +1,350 @@
+# =====================================================================
+#  Tactical Trading Bot V1 — Parameters (single file)
+# =====================================================================
+#  This is the ONLY place where the bot's numbers live. No values are
+#  "hard-wired" in the code. The Control panel (menu item 11) edits this
+#  same file. Every parameter has a plain-language explanation: the bot
+#  already works with the default values below.
+# ---------------------------------------------------------------------
+
+# --- DATA -----------------------------------------------------------
+data:
+  # Where the local history lives (a single file, no server to install).
+  database: "data/market.duckdb"
+
+  # Data update mode:
+  #   live = downloads the missing days from the real providers (needs the
+  #          Alpaca keys; Stooq and FRED also work without keys)
+  #   demo = SYNTHETIC history, runs without internet or keys (to try it out)
+  mode: live
+
+  # From which year to keep the history (the Excel model starts in 2005).
+  history_start: "2005-01-01"
+
+  # TRUSTED boundary of the data you import yourself: rows after this
+  # date are ignored at import and re-acquired by the bot (so the history
+  # stays consistent). Leave empty ("") to import everything there is.
+  # You do NOT need to edit it by hand: 'update-data' moves it forward by
+  # itself after every successful live update (backup in params.yaml.bak).
+  history_end: "2026-11-20"
+
+  # Providers for real data (used only in "live" mode).
+  primary_provider: alpaca      # US stocks/ETFs
+  fallback_provider: stooq      # used if the primary one does not answer
+  indices_provider: fred        # ^SPX/^VIX from FRED (Alpaca does not cover indices)
+  alpaca_feed: iex              # Alpaca free plan
+
+# --- REGIME (bottom-up 4-quadrant model, 40 ETFs) -------------------
+regime:
+  # Windows of the 6 moving averages (days). NB: these are the EFFECTIVE
+  # windows of the Excel formulas (the sheet labels say 5/8/13/21/42/63,
+  # but the formulas use 20 and 41 — here we replicate the formulas, not
+  # the labels).
+  ma_windows: [5, 8, 13, 20, 41, 63]
+
+  # Vote threshold: how strong an ETF's signal must be to count
+  # (higher = more selective). 5 in the model.
+  vote_threshold: 5
+
+  # Period of the RSI on the quadrant scores (days).
+  rsi_period: 21
+
+  # Period of the exponential average on the quadrant fractions.
+  # In the Excel it is ADAPTIVE (it depends on 12 confirmation indicators
+  # entered by hand, data the bot does not receive): here it is fixed at
+  # the recent value, 16.
+  ema_period: 16
+
+  # Thresholds of the regime selector (from the Regime sheet).
+  bifurcation_threshold: 0.215   # if the quadrants are "close" use the RSI...
+  reversal_threshold: 92         # ...and if very close look at momentum (ROC)
+
+  # The 40 ETFs, 10 per quadrant (decoded from the workbook and verified
+  # with the golden tests against the values computed by Excel).
+  quadrants:
+    disinflation: [QUAL, USMV, SPHQ, SCHD, DGRO, XLK, AMLP, BKLN, NEAR, JPST]
+    reflation:    [VOO, VT, QQQM, MTUM, IMTM, JEPI, PDBC, COMT, GUNR, LIT]
+    stagflation:  [USDU, HRL, BTU, NTR, AMR, UNG, BOIL, DOG, GIS, PSX]
+    deflation:    [RWM, SO, SDS, GOVT, SCHZ, ISTB, VGSH, BAR, GLD, TLT]
+
+# --- VIX MODEL ------------------------------------------------------
+vix:
+  enabled: true
+
+  # Assets the BUY/SELL/HOLD signals are issued for.
+  market_asset: TQQQ       # receives "Buy SPX" / "Sell SPX"
+  volatility_asset: UVIX   # receives "Buy VIX" / "Sell VIX"
+
+  # Series used by the VIX model.
+  spx_symbol: "^SPX"
+  vix_symbol: "^VIX"
+  use_tdex: true           # TDEX active as a VOTER in the live signal (see voting_legs)
+  tdex_source: fred        # NASDAQTDEX series from FRED (validated vs Excel)
+  gate_allow_missing_tdex: true  # missing TDEX (pre-2013) does NOT block the gate:
+                           # column P (Buy SPX) is active from the start of the
+                           # history when VRP+RSI agree, as in the Excel. false =
+                           # legacy (bot blind until 2013, it dodged 2008 for lack
+                           # of data). true = faithful: 2008 is a real test.
+
+  # TDEX staleness guard: short gaps in the FRED feed (holidays,
+  # misalignments) are filled with the previous value, BUT if the last
+  # value is older than this number of calendar days TDEX ABSTAINS (like
+  # pre-2013) instead of voting on a projected value. It protects against
+  # silent interruptions of the feed. Empty = guard off.
+  tdex_max_staleness_days: 10
+
+  # How the VIX engine combines the legs (VRP, RSI, TDEX):
+  #   gate     = EXACT replica of the Excel (TDEX as a gate/AND). It is the
+  #              mode verified by the golden test: the reference.
+  #   majority = TDEX is an equal vote, no veto. It enters if the votes in
+  #              favour are the majority of the ACTIVE legs (3->2, 2->2).
+  #              TDEX abstains when data is missing (pre-2013).
+  #
+  # >>> RESEARCH NOTE (analysis of 2026-07-16, real data 2005-2026) <<<
+  # The MARKET LEG in majority mode badly underperforms: 0.94x in 21
+  # years (in only 28% of the time, ~4-day trades) against 4.46x for the
+  # gate and 6.37x for buy&hold. A Monte Carlo of 500 exit-threshold
+  # combinations (walk-forward 2005-2020 / test 2020-2026, Calmar
+  # objective) showed that NO calibration rescues it (best candidate: 1.07x
+  # in training); not even a unanimous entry (0.84-1.18x). The value of the
+  # gate comes from elsewhere: it avoided 2008 (DD -20% vs -57%) and since
+  # 2013 it is ALWAYS invested (a single position, zero exits): it enters
+  # on strength and almost never exits. Every "active" exit tested sells
+  # weakness and buys back higher, destroying value.
+  # Options still open: hybrid (gate-style market + majority volatility)
+  # or all gate. The Monte Carlo remains available (menu 14 /
+  # calibrate-market --montecarlo N).
+  # TEST 2026-07-19: gate to compare the drawdown (was: majority).
+  # The gate historically: 4.46x in 21 years, DD -19.8% in 2008 vs -56.8% B&H.
+  voting_method: gate
+
+  # >>> TREND FILTER (confirmed veto) on the market leg <<<
+  # Added 2026-07-19. Applies in gate AND majority: if SPX closes below
+  # the SMA(window) AND the confirmation fires, the market position is
+  # forced to 0 (the legs keep voting: the veto sits on top). Tested with
+  # walk-forward 2005-Feb2020 / Feb2020-2026 on real data:
+  #   pure gate           4.45x  DD -33.9%  Calmar 0.21
+  #   gate + veto (or)    3.79x  DD -17.4%  Calmar 0.37   <- this one
+  # confirmation: or    = SMA broken AND (rsi<0 OR vrp<0)  [recommended, tested]
+  #               and   = SMA broken AND (rsi<0 AND vrp<0) [weak: DD -29.7%]
+  #               total = the broken SMA is enough         [returns less: 2.64x]
+  # Switch it off with enabled: false to go back to the exact previous behaviour.
+  trend_filter:
+    enabled: true
+    window: 200
+    confirmation: or
+
+  # Voting legs of the VIX engine (live). Switch one off to exclude it from
+  # the vote and from the exits. Applies only with voting_method: majority.
+  voting_legs:
+    vrp: true
+    rsi: true
+    tdex: true
+
+  # >>> RE-ENTRY OF THE MARKET LEG (added 2026-07-20) <<<
+  # After an exit, how the market leg re-enters:
+  #   edge  = legacy: a NEW rising edge of the entry state is required. If
+  #           the gate's AND stays true for months, after an exit you stay
+  #           out for months ("late" entries).
+  #   state = if you are flat, the entry state is true and the exit is
+  #           false, you re-enter immediately (timely).
+  # Applies in majority and in the CALIBRATED gate (with market_per_quad).
+  # The pure gate (without market_per_quad) stays the exact Excel replica.
+  # NB: the calibration (calibrate-market / Monte Carlo) evaluates the
+  # candidates with the re-entry configured HERE: to look for thresholds
+  # with timely re-entry, set "state" BEFORE calibrating.
+  market_reentry: edge
+
+  # >>> MODE OF THE MARKET LEG (added 2026-10-14) <<<
+  #   classic = as always: entry/exit of the voting method and, if
+  #             enabled, the trend filter on top; once the veto ends the
+  #             bot re-enters automatically.
+  #   trend   = EXITS only via the trend filter (SPX below the average AND
+  #             RSI/VRP confirmation, per regime) and RE-ENTERS only when
+  #             the entry rule is true (RSI, VRP and TDEX above threshold,
+  #             per regime). The thresholds live in the
+  #             trend_entries_per_quad / trend_exits_per_quad blocks and
+  #             are calibrated from the menu, item 14. The trend filter is
+  #             forced on (window and confirmation from trend_filter).
+  market_mode: trend
+
+  # Exit of the volatility leg (majority ONLY):
+  #   consensus = exit when the majority lapses (dual of the 2-of-3
+  #               entry: consistent, calibratable, default)
+  #   legs      = per-leg OR like the Excel; with the majority entry it
+  #               immediately closes entries made with a dissenting leg
+  # In both variants the exit is anchored to the position: an open
+  # position ALWAYS receives its exit (not needed in the gate: the AND
+  # entry implies sell false).
+  longvol_exit: consensus
+
+  # TDEX thresholds (from the VIX_Output sheet).
+  tdex_gate_buy_spx: -0.5  # "Buy SPX" vote/gate: votes for the market if smoothed z > threshold
+  tdex_leg_sell_spx: -7.5  # Excel/gate "Sell SPX" branch (direction ">"): do NOT touch, it keeps the replica faithful to the workbook
+  tdex_vote_longvol: -3.0  # long-vol vote: buy vol if smoothed z <= threshold (fear: ~21% of days). In gate mode the Excel uses 4.0
+  # >>> THRESHOLD YOU CAN TUNE <<<
+  # SPX exit in majority mode: TDEX votes "exit" when there is DEEP FEAR,
+  # i.e. smoothed z < threshold. The lower you set it (e.g. -5), the rarer
+  # and more selective the exit; the higher towards -3, the earlier you exit.
+  #   -3.0 = exit on the same fear you buy vol on (~21% of days "on")
+  #   -4.0 = more selective exit, leaves a -3..-4 cushion (recommended default)
+  #   -5.0 = exit only on strong spikes (~7% of days "on")
+  tdex_vote_sell_spx: -4.0
+
+  # >>> TDEX THRESHOLDS PER QUADRANT (majority mode) <<<
+  # Live extension, NOT an Excel replica (in the workbook the TDEX thresholds
+  # are global cells). If this block is present, in majority mode it wins
+  # over the global values above; delete it (or comment it out) to go back
+  # to the global thresholds. Seed criterion: same activation frequency in
+  # every regime (sell ~13%, longvol ~21%, buy ~58% of days) -> in
+  # Deflation, where deep fear is "normal", deeper fear is needed to act;
+  # in Disinflation less is enough.
+  #   sell_spx : exit SPX if tdex_smooth <  threshold (deep fear)
+  #   longvol  : buy vol  if tdex_smooth <= threshold (fear)
+  #   buy_spx  : vote for the market if tdex_smooth > threshold (calm)
+  tdex_per_quad:
+    1: {sell_spx: -3.5, longvol: -2.5, buy_spx: 0.0}    # Disinflation
+    2: {sell_spx: -3.9, longvol: -3.0, buy_spx: -0.9}   # Reflation
+    3: {sell_spx: -4.0, longvol: -3.0, buy_spx: -0.1}   # Stagflation
+    4: {sell_spx: -4.7, longvol: -3.6, buy_spx: -0.7}   # Deflation
+
+  # >>> LONG-VOL THRESHOLDS PER QUADRANT (majority mode) <<<
+  # Live extension, NOT an Excel replica: if present, this block OVERRIDES
+  # rsi_long/vrp_long of params_per_quad, but ONLY for the volatility leg in
+  # majority mode (the gate and the market leg do not see it). It exists
+  # because the midterm thresholds were born for the gate logic (AND): in
+  # 2-of-3 they keep the bot in volatility ~44% of the time. It is
+  # generated/updated with:
+  #     python cli.py calibrate-longvol              (table of the candidates)
+  #     python cli.py calibrate-longvol --apply 20   (writes the choice here)
+  # or from the menu, item 10. Delete or comment out the block to go back
+  # to the workbook thresholds.
+  # longvol_per_quad:
+  #   2: {rsi_long: -1.0}
+  #   4: {rsi_long: -1.0}
+
+  # >>> MARKET-LEG EXIT THRESHOLDS PER QUADRANT <<<
+  # Live extension, NOT an Excel replica: the sell SPX drops the fixed
+  # zeros (rsi<0 / vrp<0) and uses the regime quantile. Since 2026-07-20
+  # it applies in majority AND in gate ("calibrated gate": Excel entry
+  # unchanged, per-quadrant exit anchored to the position, TDEX branch =
+  # deep fear instead of the inert tdex>-7.5). Entry and params_per_quad
+  # do NOT change (.xlsb check intact). Without this block the gate stays
+  # the EXACT replica of the workbook.
+  # Recalibrated with 'calibrate-market' on 2026-07-19 (quantile montecarlo #1, n=500, objective calmar).
+  # Delete or comment out the block to go back to the Excel zeros.
+  # DISABLED 2026-07-19: candidate #1 made the test period worse
+  # (1.76% vs 5.49% a year, DD -13.6% vs -6.9%).
+  # market_per_quad:
+  #   1: {rsi_exit: -1.2, vrp_exit: 3.1}
+  #   2: {rsi_exit: -3.2, vrp_exit: 2.2}
+  #   3: {rsi_exit: -7.7, vrp_exit: -2.5}
+  #   4: {rsi_exit: -9.4, vrp_exit: -7.5}
+
+  # >>> ENTRY THRESHOLDS PER REGIME (market_mode: trend) <<<
+  # After a trend-filter exit the bot RE-ENTERS only when RSI, VRP and
+  # TDEX are ABOVE these thresholds (regime of the day) and there is no veto.
+  # Calibrated with the grid on 2026-11-08 (training from 2018-01-01, evaluation from 2013-07-26, objective calmar, costs 5 bps, tie-break robust).
+  # Delete the block to go back to the workbook's rsi_short/vrp_short
+  # and to tdex_gate_buy_spx.
+  trend_entries_per_quad:
+    1: {rsi_buy: -5, vrp_buy: -4.7, tdex_buy: -5.9}   # Disinflation
+    2: {rsi_buy: -6.9, vrp_buy: -0.1, tdex_buy: -4.7}   # Reflation
+    3: {rsi_buy: -6.3, vrp_buy: 4.5, tdex_buy: 0.6}   # Stagflation
+    4: {rsi_buy: -0.8, vrp_buy: -2.8, tdex_buy: 1}   # Deflation
+
+  # >>> TREND FILTER CONFIRMATION THRESHOLDS PER REGIME (market_mode: trend) <<<
+  # The bot EXITS when SPX closes below the trend-filter average AND (RSI
+  # below 'rsi' OR VRP below 'vrp') in the regime of the day.
+  # Calibrated with the grid on 2026-11-08 (training from 2018-01-01, evaluation from 2013-07-26, objective calmar, costs 5 bps, tie-break robust).
+  # Delete the block to go back to the zero confirmation (rsi<0 or vrp<0).
+  trend_exits_per_quad:
+    1: {rsi: -8.8, vrp: 0}   # Disinflation
+    2: {rsi: -8.5, vrp: -0.2}   # Reflation
+    3: {rsi: -3.4, vrp: 3.8}   # Stagflation
+    4: {rsi: -9.1, vrp: 0.5}   # Deflation
+
+  # Parameters per quadrant (1=Disinfl., 2=Refl., 3=Stagfl., 4=Defl.),
+  # from the "Inputs" sheet of the Excel. Rarely touched.
+  # AUTHORITATIVE per-quad parameters from the MIDTERM workbook (Inputs B3:I6,
+  # set optimised by the author's backtests). Transcribed from the
+  # screenshot of 03-07-2026 — to be verified cell by cell against the
+  # .xlsb file.
+  params_per_quad:
+    1: {rs_ema: 10, rsi_smoother: 3,  hv_lookback: 6,  vrp_ema: 13,
+        rsi_long: -3,   vrp_long: 9,     rsi_short: 2,     vrp_short: 1}
+    2: {rs_ema: 2,  rsi_smoother: 2,  hv_lookback: 18, vrp_ema: 18,
+        rsi_long: 9,    vrp_long: 1,     rsi_short: 0,     vrp_short: -10}
+    3: {rs_ema: 19, rsi_smoother: 2,  hv_lookback: 16, vrp_ema: 10,
+        rsi_long: 0,    vrp_long: 3,     rsi_short: -4,    vrp_short: 2}
+    4: {rs_ema: 3,  rsi_smoother: 2,  hv_lookback: 12, vrp_ema: 4,
+        rsi_long: 9,    vrp_long: -3,    rsi_short: -2,    vrp_short: -1}
+
+# Where the quadrant for the VIX model comes from:
+#   manual   = you set it below (as the Excel does in column Z)
+#   detected = computed by the RegimeDetector from the 40 ETFs
+regime_source:
+  mode: detected
+  manual_quad: 3
+
+# --- EXECUTION ------------------------------------------------------
+execution:
+  # A single run after the US close (no more hourly job: the indicators
+  # are daily, computing them intraday on incomplete bars gives unstable
+  # signals and multiplies the calls).
+  end_of_day_only: true
+  timezone: Europe/Rome
+
+# --- NOTIFICATIONS --------------------------------------------------
+notifications:
+  telegram_enabled: true
+  mode: always   # always = also the "all ok" heartbeat; events = BUY/SELL only
+
+  # EMAIL channel in addition to Telegram (redundancy: if Telegram is down
+  # the signal still arrives). SMTP credentials in the .env file (see
+  # 'setup'): EMAIL_SMTP_USER and EMAIL_SMTP_PASSWORD. Gmail needs an
+  # "app password" (myaccount.google.com/apppasswords), not the normal one.
+  email_enabled: false
+  email:
+    smtp_server: smtp.gmail.com   # your provider's SMTP server
+    smtp_port: 587                # 587 = STARTTLS (standard)
+    recipient: ""                 # where to receive the signals (empty = same SMTP user)
+
+# --- PORTFOLIO / TRADE LOG -------------------------------------------
+# CONSENSUS model: every signal votes long/short. If the share of
+# agreeing votes exceeds the threshold, the bot enters the risk-on asset
+# (long consensus) or the risk-off asset (short consensus); otherwise it
+# stays liquid and waits.
+portfolio:
+  asset_risk_on: ^SPX        # where you go with a LONG consensus (replaceable)
+  asset_risk_off: TLT        # where you go with a SHORT consensus (replaceable)
+  consensus_threshold: 0.5   # share of agreeing votes required (>). With 2 signals = unanimity
+  invert_volatility_leg: true   # "buy volatility" = risk-off vote
+  contributions_file: contributions.csv   # your deposits (date, amount)
+  tdex_vote_threshold: -3.0  # TDEX votes risk-off if smoothed z <= threshold (real fear: ~21% of days), risk-on if >. (was 4.0 = risk-off 93% of days, almost a fixed vote)
+  hold_position: false       # Excel style: exit when the consensus lapses (loose per-leg exits). true = hysteresis (hold until the opposite consensus)
+  market_vote: ternary       # market leg vote: "ternary" = in position +1,
+                             # active exit (Excel column U) -1, otherwise 0
+                             # (abstention, like "Do Nothing"). "binary" = legacy
+                             # (out of position = always a full risk-off vote).
+
+# --- VOTING LEGS (can be enabled/disabled from the interface) --------
+# Every active leg casts ONE vote in the consensus. Disable one to
+# exclude it (e.g. try only market+volatility without TDEX). TDEX
+# abstains by itself when it has no data (before 2013).
+legs:
+  market: true        # equity direction (VRP+RSI)
+  volatility: true    # volatility (VRP+RSI, inverse reading)
+  tdex: true          # TDEX z-score (third leg, no more veto)
+
+# --- DASHBOARD: COMPARISON WITH CASH ---------------------------------
+# The backtest chart has two "if I had not invested" lines:
+#   - solid line at 1x = money kept still in cash;
+#   - dashed line      = the same cash net of inflation
+#     (the purchasing power that remains). Chart only: the signals do not change.
+# Which inflation to use (FRED series, downloaded automatically, no key):
+#   CPIAUCSL            = USA (consistent with the backtest, which is in dollars)
+#   CP0000EZ19M086NEST  = euro area (HICP)
+#   CP0000ITM086NEST    = Italy (HICP)
+dashboard:
+  inflation_series: CPIAUCSL
